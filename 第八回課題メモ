@@ -1,0 +1,3 @@
+!echo 24G3055 > report
+!openssl pkeyutl -encrypt -pubin -inkey bob-public.pem -in message4bob -out message4bob-secret
+!cat message4bob-secret
