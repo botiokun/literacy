@@ -1,0 +1,11 @@
+docker run --rm curlimages/curl curl -s http://example.net
+docker run --rm -it -p 80:80 -p 3000:3000 ubuntu:jammy
+apt update && apt install -y git
+cd
+git clone https://github.com/taroyabuki/techappweb.git
+export DEBIAN_FRONTEND=noninteractive
+apt update && apt install -y apache2 build-essential curl git libapache2-mod-php php python3
+apachectl start
+cp /root/host/techappweb/07-09/app/html/* /var/www/html/
+<?php echo date("r");
+<?php echo "Hello, {$_GET['username']}.\n";
