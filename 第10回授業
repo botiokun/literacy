@@ -9,3 +9,5 @@ apachectl start
 cp /root/host/techappweb/07-09/app/html/* /var/www/html/
 <?php echo date("r");
 <?php echo "Hello, {$_GET['username']}.\n";
+ドッカーを起動させ、コンテナを作った。
+その中にアプリを入れ、ウェブページを出口にすることで、特定のリンクからのアクセスを可能にした。
