@@ -1,0 +1,5 @@
+実行('''
+select count(*)
+from zip
+where office like '%千葉工%' 
+''')
