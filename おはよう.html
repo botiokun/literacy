@@ -1,1 +1,178 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>かんたん暗号化ツール</title>
+  <style>
+    body{font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif; padding:24px; background:#f7f9fc; color:#111}
+    .card{background:white; border-radius:12px; padding:18px; box-shadow:0 6px 18px rgba(20,30,50,0.06); max-width:780px; margin:0 auto}
+    h1{font-size:20px; margin:0 0 8px}
+    label{display:block; font-weight:600; margin-top:12px}
+    textarea{width:100%; min-height:96px; padding:10px; font-size:15px; border-radius:8px; border:1px solid #e3e8ef}
+    select,input[type=number]{padding:8px;border-radius:8px;border:1px solid #e3e8ef}
+    .row{display:flex; gap:10px; align-items:center; margin-top:12px}
+    button{background:#0b69ff; color:white; padding:10px 14px; border-radius:8px; border:0; cursor:pointer}
+    button.secondary{background:#6b7280}
+    pre{background:#0f1724;color:#e6eef8;padding:12px;border-radius:8px;white-space:pre-wrap}
+    .small{font-size:13px;color:#556}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>かんたん暗号化ツール</h1>
+    <p class="small">テキストを入力して暗号化方式を選んでください。サンプルで「おはよう」を試すと面白いです。</p>
 
+    <label>元のテキスト</label>
+    <textarea id="plain">おはよう</textarea>
+
+    <label>方式</label>
+    <div class="row">
+      <select id="method">
+        <option value="caesar">シーザー暗号（英数字のみ）</option>
+        <option value="base64">Base64（UTF-8）</option>
+        <option value="substitution">単純置換（ひらがな／文字単位）</option>
+      </select>
+      <div id="caesarOptions" style="display:flex; gap:8px; align-items:center;">
+        <label class="small">シフト</label>
+        <input id="shift" type="number" value="3" min="1" max="25" />
+      </div>
+      <button id="doBtn">暗号化</button>
+      <button id="clearBtn" class="secondary">クリア</button>
+    </div>
+
+    <label>結果</label>
+    <pre id="result">--</pre>
+    <div class="row" style="margin-top:8px">
+      <button id="copyBtn">コピー</button>
+      <button id="decodeBtn" class="secondary">復号（可能な場合）</button>
+      <span class="small">※シーザーとBase64は復号可能。置換は表示されたマッピングで復号可能。</span>
+    </div>
+
+    <details style="margin-top:12px">
+      <summary>仕組み（簡単な説明）</summary>
+      <ul>
+        <li>シーザー暗号：英数字の文字コードを一定量だけずらします（日本語は対象外）。</li>
+        <li>Base64：バイナリをテキストに変換する符号化。復号すれば元に戻ります。</li>
+        <li>単純置換：入力で現れる文字ごとにランダムな対応を作ります（表示されたマッピングを復号時に使用）。</li>
+      </ul>
+    </details>
+  </div>
+
+  <script>
+    // --- ユーティリティ ---
+    function toBase64Unicode(str){ // UTF-8対応 btoa/atobのラッパー
+      return btoa(unescape(encodeURIComponent(str)));
+    }
+    function fromBase64Unicode(b64){
+      try{ return decodeURIComponent(escape(atob(b64))); }catch(e){ return null }
+    }
+
+    // --- シーザー暗号（英数字のみ） ---
+    function caesarEncrypt(s, shift){
+      return s.replace(/[A-Za-z0-9]/g, function(ch){
+        var code = ch.charCodeAt(0);
+        // 大文字
+        if(code >= 65 && code <= 90){
+          return String.fromCharCode((code - 65 + shift) % 26 + 65);
+        }
+        // 小文字
+        if(code >= 97 && code <= 122){
+          return String.fromCharCode((code - 97 + shift) % 26 + 97);
+        }
+        // 数字
+        if(code >= 48 && code <= 57){
+          return String.fromCharCode((code - 48 + shift) % 10 + 48);
+        }
+        return ch;
+      });
+    }
+    function caesarDecrypt(s, shift){ return caesarEncrypt(s, (26 - (shift%26)) %26); }
+
+    // --- 単純置換（文字ごとにランダム対応） ---
+    function makeSubstitutionMap(chars){
+      const uniq = Array.from(new Set(chars));
+      const pool = uniq.slice();
+      // shuffle pool
+      for(let i=pool.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1)); [pool[i],pool[j]] = [pool[j],pool[i]];
+      }
+      const map = {};
+      for(let i=0;i<uniq.length;i++){ map[uniq[i]] = pool[i]; }
+      return map;
+    }
+    function applyMap(s,map){
+      return s.split('').map(ch => map[ch] ?? ch).join('');
+    }
+    function invertMap(map){
+      const inv = {}; for(const k in map) inv[map[k]] = k; return inv;
+    }
+
+    // --- DOM ---
+    const method = document.getElementById('method');
+    const caesarOptions = document.getElementById('caesarOptions');
+    const doBtn = document.getElementById('doBtn');
+    const result = document.getElementById('result');
+    const plain = document.getElementById('plain');
+    const shiftInput = document.getElementById('shift');
+    const copyBtn = document.getElementById('copyBtn');
+    const decodeBtn = document.getElementById('decodeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    let lastMethod = null;
+    let lastMeta = null; // 置換マップなど
+
+    method.addEventListener('change', ()=>{
+      caesarOptions.style.display = method.value === 'caesar' ? 'flex' : 'none';
+    });
+
+    doBtn.addEventListener('click', ()=>{
+      const text = plain.value || '';
+      if(method.value === 'caesar'){
+        const s = Number(shiftInput.value) || 0;
+        const enc = caesarEncrypt(text, s);
+        result.textContent = enc;
+        lastMethod = 'caesar'; lastMeta = {shift: s};
+      }else if(method.value === 'base64'){
+        const enc = toBase64Unicode(text);
+        result.textContent = enc;
+        lastMethod = 'base64'; lastMeta = {};
+      }else if(method.value === 'substitution'){
+        const chars = text.split('').filter(c=>c.trim().length>0);
+        const map = makeSubstitutionMap(chars);
+        const enc = applyMap(text, map);
+        // 保存用にマッピングを文字列化
+        lastMethod = 'substitution'; lastMeta = {map:map};
+        // 表示にマッピングも付けて見せる
+        let mappingLines = '\n\n=== マッピング（復号に必要） ===\n';
+        for(const k of Object.keys(map)) mappingLines += `${k} → ${map[k]}\n`;
+        result.textContent = enc + mappingLines;
+      }
+    });
+
+    copyBtn.addEventListener('click', async ()=>{
+      try{ await navigator.clipboard.writeText(result.textContent); alert('コピーしました'); }catch(e){ alert('コピーに失敗しました'); }
+    });
+
+    decodeBtn.addEventListener('click', ()=>{
+      if(!lastMethod){ alert('まず暗号化してください'); return; }
+      const txt = result.textContent.split('\n')[0]; // 置換は先頭が暗号文
+      if(lastMethod === 'caesar'){
+        const s = lastMeta.shift || 0; result.textContent = caesarDecrypt(txt, s);
+      }else if(lastMethod === 'base64'){
+        const dec = fromBase64Unicode(txt);
+        result.textContent = dec===null? '復号に失敗しました（無効なBase64）' : dec;
+      }else if(lastMethod === 'substitution'){
+        const inv = invertMap(lastMeta.map || {});
+        const dec = applyMap(txt, inv);
+        result.textContent = dec;
+      }
+    });
+
+    clearBtn.addEventListener('click', ()=>{ plain.value=''; result.textContent='--'; lastMethod=null; lastMeta=null; });
+
+    // 初期状態
+    method.dispatchEvent(new Event('change'));
+  </script>
+</body>
+</html>
