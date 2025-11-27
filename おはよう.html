@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>かんたん暗号化ツール</title>
+  <title>かんたん変換ツール</title>
   <style>
     body{font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif; padding:24px; background:#f7f9fc; color:#111}
     .card{background:white; border-radius:12px; padding:18px; box-shadow:0 6px 18px rgba(20,30,50,0.06); max-width:780px; margin:0 auto}
@@ -20,8 +20,8 @@
 </head>
 <body>
   <div class="card">
-    <h1>かんたん暗号化ツール</h1>
-    <p class="small">テキストを入力して暗号化方式を選んでください。サンプルで「おはよう」を試すと面白いです。</p>
+    <h1>かんたん変換ツール</h1>
+    <p class="small">テキストを入力して変換方式を選んでください。サンプルで「おはよう」を試すと面白いです。</p>
 
     <label>元のテキスト</label>
     <textarea id="plain">おはよう</textarea>
@@ -32,13 +32,13 @@
         <option value="caesar">シーザー暗号（英数字のみ）</option>
         <option value="base64">Base64（UTF-8）</option>
         <option value=\"substitution\">単純置換（ひらがな／文字単位）</option>
-        <option value=\"hash\">ハッシュ関数（SHA-256）</option>
+        <option value=\"hash\">ハッシュ関数（SHA-256：逆変換不可）</option>
       </select>
       <div id="caesarOptions" style="display:flex; gap:8px; align-items:center;">
         <label class="small">シフト</label>
         <input id="shift" type="number" value="3" min="1" max="25" />
       </div>
-      <button id="doBtn">暗号化</button>
+      <button id="doBtn">変換</button>
       <button id="clearBtn" class="secondary">クリア</button>
     </div>
 
@@ -46,16 +46,16 @@
     <pre id="result">--</pre>
     <div class="row" style="margin-top:8px">
       <button id="copyBtn">コピー</button>
-      <button id="decodeBtn" class="secondary">復号（可能な場合）</button>
-      <span class="small">※シーザーとBase64は復号可能。置換は表示されたマッピングで復号可能。</span>
+      <button id="decodeBtn" class="secondary">逆変換（可能な場合）</button>
+      <span class="small">※シーザーとBase64は逆変換可能。置換は表示されたマッピングで逆変換可能。</span>
     </div>
 
     <details style="margin-top:12px">
       <summary>仕組み（簡単な説明）</summary>
       <ul>
         <li>シーザー暗号：英数字の文字コードを一定量だけずらします（日本語は対象外）。</li>
-        <li>Base64：バイナリをテキストに変換する符号化。復号すれば元に戻ります。</li>
-        <li>単純置換：入力で現れる文字ごとにランダムな対応を作ります（表示されたマッピングを復号時に使用）。</li>
+        <li>Base64：バイナリをテキストに変換する符号化。逆変換すれば元に戻ります。</li>
+        <li>単純置換：入力で現れる文字ごとにランダムな対応を作ります（表示されたマッピングを逆変換時に使用）。</li>
       </ul>
     </details>
   </div>
@@ -109,6 +109,14 @@
       const inv = {}; for(const k in map) inv[map[k]] = k; return inv;
     }
 
+    // --- SHA-256 ハッシュ（変換ではない） ---
+    async function sha256Hex(str){
+      const data = new TextEncoder().encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const bytes = Array.from(new Uint8Array(hashBuffer));
+      return bytes.map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+
     // --- DOM ---
     const method = document.getElementById('method');
     const caesarOptions = document.getElementById('caesarOptions');
@@ -145,7 +153,7 @@
         // 保存用にマッピングを文字列化
         lastMethod = 'substitution'; lastMeta = {map:map};
         // 表示にマッピングも付けて見せる
-        let mappingLines = '\n\n=== マッピング（復号に必要） ===\n';
+        let mappingLines = '\n\n=== マッピング（逆変換に必要） ===\n';
         for(const k of Object.keys(map)) mappingLines += `${k} → ${map[k]}\n`;
         result.textContent = enc + mappingLines;
       }
@@ -156,13 +164,13 @@
     });
 
     decodeBtn.addEventListener('click', ()=>{
-      if(!lastMethod){ alert('まず暗号化してください'); return; }
+      if(!lastMethod){ alert('まず変換してください'); return; }
       const txt = result.textContent.split('\n')[0]; // 置換は先頭が暗号文
       if(lastMethod === 'caesar'){
         const s = lastMeta.shift || 0; result.textContent = caesarDecrypt(txt, s);
       }else if(lastMethod === 'base64'){
         const dec = fromBase64Unicode(txt);
-        result.textContent = dec===null? '復号に失敗しました（無効なBase64）' : dec;
+        result.textContent = dec===null? '逆変換に失敗しました（無効なBase64）' : dec;
       }else if(lastMethod === 'substitution'){
         const inv = invertMap(lastMeta.map || {});
         const dec = applyMap(txt, inv);
